@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Height & Weight Classifier</title>
+<style>
+:root{box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);--bg:#f6f6f3;--card:#fff;--ink:#1b1b19;--mute:#6a6a64;--line:#e1e1da;--a:#d6336c;--b:#1c7ed6;--ok:#2f9e44;--warn:#e67700}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#151516;--card:#1f1f21;--ink:#ececea;--mute:#9a9a94;--line:#343437;--a:#f06595;--b:#4dabf7;--ok:#69db7c;--warn:#ffa94d}}
+:root[data-theme="dark"]{--bg:#151516;--card:#1f1f21;--ink:#ececea;--mute:#9a9a94;--line:#343437;--a:#f06595;--b:#4dabf7;--ok:#69db7c;--warn:#ffa94d}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif}
+main{max-width:1000px;margin:0 auto;padding:18px 14px 40px}
+h1{font-size:22px;margin:0}.sub{color:var(--mute);margin:2px 0 14px}
+.tabs{display:flex;gap:6px;margin-bottom:12px}.tabs button{flex:1}
+button,select,input{font:inherit;color:var(--ink);background:var(--card);border:1px solid var(--line);border-radius:8px;padding:8px 10px}
+button{cursor:pointer;font-weight:600}button.on{background:var(--ink);color:var(--bg)}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}@media(max-width:760px){.grid{grid-template-columns:1fr}}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px;min-width:0}
+.card h2{font-size:12.5px;margin:0 0 10px;color:var(--mute);text-transform:uppercase;letter-spacing:.05em}
+.full{grid-column:1/-1}.row{display:flex;gap:8px;align-items:center;margin:6px 0}.row>label{flex:1;font-weight:600}
+.row input[type=number]{width:110px}input[type=range]{flex:2;padding:0}
+.verdict{font-size:34px;font-weight:800;margin:0}.bar{height:26px;border-radius:13px;overflow:hidden;display:flex;border:1px solid var(--line);margin:8px 0}
+.bar div{display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:13px;transition:width .15s}
+.kv{display:grid;grid-template-columns:auto 1fr;gap:2px 14px;font-size:14px}.kv span:nth-child(odd){color:var(--mute)}
+.badge{display:inline-block;padding:2px 10px;border-radius:99px;font-size:12.5px;font-weight:700;border:1px solid currentColor}
+.note{font-size:12.5px;color:var(--mute);margin-top:6px}.warn{color:var(--warn);font-weight:600;font-size:13px;margin-top:6px}
+canvas{width:100%;height:auto;display:block;cursor:crosshair}
+table{border-collapse:collapse;width:100%;font-size:14px}td,th{border-bottom:1px solid var(--line);padding:5px 8px;text-align:right}th:first-child,td:first-child{text-align:left}
+.hide{display:none}textarea{width:100%;min-height:70px;font:12px monospace;background:var(--card);color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:8px;box-sizing:border-box}
+</style></head><body><main>
+<h1>Height &amp; Weight Classifier</h1>
+<p class="sub">Logistic regression from your <code>.pkl</code> · custom inputs, thresholds, and in-browser retraining</p>
+<div class="tabs"><button id="t1" class="on">Predict</button><button id="t2">Improve accuracy</button></div>
+
+<section id="p1" class="grid">
+ <div class="card"><h2>Your input</h2>
+  <div class="row"><label>Height</label><input id="h" type="number" step="0.1" value="170"><select id="hu"><option value="cm">cm</option><option value="in">in</option></select></div>
+  <div class="row"><label>Weight</label><input id="w" type="number" step="0.1" value="65"><select id="wu"><option value="kg">kg</option><option value="lb">lb</option></select></div>
+  <div class="row"><label>Model</label><select id="mod"><option value="orig">Original (.pkl)</option><option value="new" disabled>Retrained (train in tab 2)</option></select></div>
+  <div class="note">Tip: click anywhere on the map below to set height &amp; weight.</div>
+  <div class="warn" id="ood"></div>
+ </div>
+ <div class="card"><h2>Result</h2>
+  <p class="verdict" id="vd"></p><span class="badge" id="conf"></span>
+  <div class="bar"><div id="b1"></div><div id="b0"></div></div>
+  <div class="kv"><span id="n1l"></span><b id="p1v"></b><span id="n0l"></span><b id="p0v"></b><span>Logit (z)</span><b id="zv"></b><span>Decision rule</span><b id="rule"></b></div>
+ </div>
+ <div class="card"><h2>Prediction settings</h2>
+  <div class="row"><label>Class 1 means</label><select id="c1"><option>Female</option><option>Male</option></select></div>
+  <div class="row"><label>Threshold <b id="tv"></b></label><input id="th" type="range" min="0.05" max="0.99" step="0.01" value="0.80"></div>
+  <div class="row"><label>Uncertain margin ± <b id="mv"></b></label><input id="mg" type="range" min="0" max="0.3" step="0.01" value="0.05"></div>
+  <div class="row"><label>Decimals</label><select id="dec"><option>2</option><option selected>4</option><option>6</option></select><label>Show as</label><select id="fmt"><option value="p">Percent</option><option value="d">Decimal</option></select></div>
+  <div class="note">Class 1 is chosen when P(class 1) &gt; threshold. Predictions within the margin of the threshold are flagged “Uncertain”. Your original app used 0.80.</div>
+ </div>
+ <div class="card"><h2>Probability map (height × weight)</h2>
+  <canvas id="map" width="560" height="380"></canvas>
+  <div class="note">Dashed = 0.50 boundary · Orange = your threshold · Dot = your input</div>
+ </div>
+ <div class="card full"><h2>Prediction history</h2><table id="hist"><tr><th>Height (cm)</th><th>Weight (kg)</th><th>P(class 1)</th><th>Result</th></tr></table>
+  <div class="row"><button id="addh">Save current to history</button><button id="clrh">Clear</button><button id="csvh">Download CSV</button></div></div>
+</section>
+
+<section id="p2" class="grid hide">
+ <div class="card full"><h2>Why this tab exists</h2>
+  <div class="note" style="font-size:14px">The original model is a plain 2-feature logistic regression, and its accuracy is unknown without data. Load your dataset to (1) measure the original model honestly on a held-out test set, (2) train an improved model (standardised features, optional BMI &amp; interaction features, L2 regularisation), (3) find the best threshold. Everything runs in your browser; nothing is uploaded.</div></div>
+ <div class="card"><h2>1 · Load data (CSV)</h2>
+  <input id="file" type="file" accept=".csv,.txt,.tsv"><div class="note">Needs height, weight and a gender/label column (header row).</div>
+  <div class="row"><label>Height unit in file</label><select id="dhu"><option value="cm">cm</option><option value="in">inches</option></select></div>
+  <div class="row"><label>Weight unit in file</label><select id="dwu"><option value="kg">kg</option><option value="lb">pounds</option></select></div>
+  <div class="row"><label>Label that equals class 1</label><select id="pos"></select></div>
+  <div id="dinfo" class="note"></div></div>
+ <div class="card"><h2>2 · Train improved model</h2>
+  <div class="row"><label><input type="checkbox" id="xf" checked> Add BMI &amp; interaction features</label></div>
+  <div class="row"><label>Regularisation (L2)</label><input id="l2" type="number" value="0.001" step="0.001" min="0" style="width:90px"></div>
+  <div class="row"><label>Test split %</label><input id="ts" type="number" value="20" min="5" max="50" style="width:90px"></div>
+  <div class="row"><button id="go" disabled>Train &amp; compare</button><button id="dl" disabled>Download model JSON</button></div>
+  <div id="st" class="note"></div></div>
+ <div class="card full"><h2>3 · Results on held-out test data</h2><div id="res" class="note">Load data and train to see accuracy, precision, recall, F1 and the confusion matrix.</div></div>
+</section>
+</main>
+<script>
+const $=i=>document.getElementById(i),css=n=>getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const O={c:[0.18835845,-0.43398554],b:0.00348626},sig=z=>1/(1+Math.exp(-z)),lg=p=>Math.log(p/(1-p));
+let T=null,D=null,hist=[],last={h:170,w:65};
+const feats=(h,w,x)=>x?[h,w,w/((h/100)**2),h*w/1000]:[h,w];
+function zOf(h,w,m){if(m==='new'&&T){const f=feats(h,w,T.x);return T.b+f.reduce((s,v,i)=>s+T.w[i]*(v-T.mu[i])/T.sd[i],0)}return O.b+O.c[0]*h+O.c[1]*w}
+const cm=()=>$('hu').value==='cm'?+$('h').value:+$('h').value*2.54, kg=()=>$('wu').value==='kg'?+$('w').value:+$('w').value*0.45359237;
+const fmt=p=>{const d=+$('dec').value;return $('fmt').value==='p'?(p*100).toFixed(Math.max(0,d-2))+'%':p.toFixed(d)};
+function run(){
+ const h=cm(),w=kg(),m=$('mod').value,t=+$('th').value,mg=+$('mg').value;last={h,w};
+ if(!isFinite(h)||!isFinite(w)||h<=0||w<=0){$('vd').textContent='Enter valid numbers';return}
+ const z=zOf(h,w,m),p1=sig(z),p0=1-p1,c1=$('c1').value,c0=c1==='Female'?'Male':'Female';
+ $('tv').textContent=t.toFixed(2);$('mv').textContent=mg.toFixed(2);
+ const unc=Math.abs(p1-t)<mg,cls=p1>t?c1:c0,col=unc?'--warn':(cls==='Female'?'--a':'--b');
+ $('vd').textContent=unc?'Uncertain ('+cls+' leaning)':cls;$('vd').style.color=css(col);
+ const cf=Math.max(p1,p0);const lv=unc?'Low confidence':cf>0.95?'Very high confidence':cf>0.8?'High confidence':'Moderate confidence';
+ $('conf').textContent=lv;$('conf').style.color=css(unc?'--warn':cf>0.8?'--ok':'--warn');
+ const ca=c1==='Female'?'--a':'--b',cb=c1==='Female'?'--b':'--a';
+ $('b1').style.cssText='width:'+p1*100+'%;background:'+css(ca);$('b0').style.cssText='width:'+p0*100+'%;background:'+css(cb);
+ $('b1').textContent=p1>.12?fmt(p1):'';$('b0').textContent=p0>.12?fmt(p0):'';
+ $('n1l').textContent='P(class 1 = '+c1+')';$('n0l').textContent='P(class 0 = '+c0+')';
+ $('p1v').textContent=fmt(p1);$('p0v').textContent=fmt(p0);$('zv').textContent=z.toFixed(3);$('rule').textContent=c1+' if P > '+t.toFixed(2);
+ const r=T&&m==='new'?T.rng:[130,210,30,160];
+ $('ood').textContent=(h<r[0]||h>r[1]||w<r[2]||w>r[3])?'⚠ Outside the typical range the model was built for ('+r[0]+'–'+r[1]+' cm, '+r[2]+'–'+r[3]+' kg). Treat this prediction with caution.':'';
+ draw(h,w,m,t)}
+function draw(h,w,m,t){
+ const cv=$('map'),x=cv.getContext('2d'),W=cv.width,H=cv.height,L=46,B=34,pw=W-L-10,ph=H-B-10,hm=[140,200],wm=[35,120];
+ x.clearRect(0,0,W,H);const a=$('c1').value==='Female'?css('--a'):css('--b'),b=$('c1').value==='Female'?css('--b'):css('--a');
+ const rg=s=>{s=s.replace('#','');return[0,2,4].map(i=>parseInt(s.substr(i,2),16))},ra=rg(a),rb=rg(b),im=x.createImageData(pw,ph);
+ for(let j=0;j<ph;j++)for(let i=0;i<pw;i++){const hh=hm[0]+i/pw*60,ww=wm[1]-j/ph*85,p=sig(zOf(hh,ww,m)),c=p>=.5?ra:rb,k=(j*pw+i)*4;im.data[k]=c[0];im.data[k+1]=c[1];im.data[k+2]=c[2];im.data[k+3]=255*(.25+.6*Math.abs(p-.5)*2)}
+ x.putImageData(im,L,10);const X=v=>L+(v-hm[0])/60*pw,Y=v=>10+(wm[1]-v)/85*ph;
+ const ln=(p,c,d)=>{x.beginPath();x.setLineDash(d);x.strokeStyle=c;x.lineWidth=2;let f=1;for(let hh=hm[0];hh<=hm[1];hh+=1){let lo=20,hi=200;for(let k=0;k<40;k++){const md=(lo+hi)/2;(sig(zOf(hh,md,m))>p)===(zOf(hh,20,m)<zOf(hh,200,m))?hi=md:lo=md}const ww=(lo+hi)/2;if(ww<wm[0]||ww>wm[1])continue;f?x.moveTo(X(hh),Y(ww)):x.lineTo(X(hh),Y(ww));f=0}x.stroke();x.setLineDash([])};
+ ln(.5,css('--ink'),[6,5]);ln(t,'#f59f00',[]);
+ x.fillStyle=css('--mute');x.font='12px system-ui';for(let v=140;v<=200;v+=10)x.fillText(v,X(v)-8,H-16);for(let v=40;v<=120;v+=20)x.fillText(v,8,Y(v)+4);
+ x.fillText('Height (cm)',L+pw/2-25,H-2);x.strokeStyle=css('--line');x.strokeRect(L,10,pw,ph);
+ if(h>=hm[0]&&h<=hm[1]&&w>=wm[0]&&w<=wm[1]){x.beginPath();x.arc(X(h),Y(w),8,0,7);x.fillStyle='#fff';x.fill();x.lineWidth=3;x.strokeStyle=css('--ink');x.stroke()}}
+$('map').addEventListener('click',e=>{const r=e.target.getBoundingClientRect(),sx=(e.clientX-r.left)*560/r.width,sy=(e.clientY-r.top)*380/r.height,pw=504,ph=336;
+ const h=140+(sx-46)/pw*60,w=120-(sy-10)/ph*85;if(h<140||h>200||w<35||w>120)return;
+ $('h').value=($('hu').value==='cm'?h:h/2.54).toFixed(1);$('w').value=($('wu').value==='kg'?w:w/0.45359237).toFixed(1);run()});
+let pu={hu:'cm',wu:'kg'};
+$('hu').onchange=()=>{$('h').value=($('hu').value==='in'?last.h/2.54:last.h).toFixed(1);run()};
+$('wu').onchange=()=>{$('w').value=($('wu').value==='lb'?last.w/0.45359237:last.w).toFixed(1);run()};
+['h','w','mod','c1','th','mg','dec','fmt'].forEach(i=>$(i).addEventListener('input',run));
+matchMedia('(prefers-color-scheme:dark)').addEventListener('change',run);
+function rh(){const t=$('hist');t.innerHTML='<tr><th>Height (cm)</th><th>Weight (kg)</th><th>P(class 1)</th><th>Result</th></tr>'+hist.map(r=>`<tr><td>${r[0]}</td><td>${r[1]}</td><td>${r[2]}</td><td>${r[3]}</td></tr>`).join('')}
+$('addh').onclick=()=>{hist.unshift([last.h.toFixed(1),last.w.toFixed(1),$('p1v').textContent,$('vd').textContent]);rh()};
+$('clrh').onclick=()=>{hist=[];rh()};
+$('csvh').onclick=()=>dlf('history.csv','Height_cm,Weight_kg,P_class1,Result\n'+hist.map(r=>r.join(',').replace('%','')).join('\n'),'text/csv');
+function dlf(n,s,t){const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([s],{type:t}));a.download=n;a.click()}
+$('t1').onclick=()=>{$('p1').classList.remove('hide');$('p2').classList.add('hide');$('t1').className='on';$('t2').className='';run()};
+$('t2').onclick=()=>{$('p2').classList.remove('hide');$('p1').classList.add('hide');$('t2').className='on';$('t1').className=''};
+
+/* ---------- retraining ---------- */
+$('file').onchange=async e=>{const f=e.target.files[0];if(!f)return;const tx=await f.text(),ls=tx.trim().split(/\r?\n/),sp=ls[0].includes(';')?';':ls[0].includes('\t')?'\t':',';
+ const hd=ls[0].split(sp).map(s=>s.trim().replace(/^"|"$/g,'').toLowerCase()),fi=n=>hd.findIndex(c=>n.some(k=>c.includes(k)));
+ const ih=fi(['height']),iw=fi(['weight']),il=fi(['gender','sex','label','class','target']);
+ if(ih<0||iw<0||il<0){$('dinfo').textContent='Could not find Height, Weight and Gender/Label columns in the header: '+hd.join(', ');return}
+ D=ls.slice(1).map(l=>{const c=l.split(sp).map(s=>s.trim().replace(/^"|"$/g,''));return{h:parseFloat(c[ih]),w:parseFloat(c[iw]),l:c[il]}}).filter(r=>isFinite(r.h)&&isFinite(r.w)&&r.l);
+ const u=[...new Set(D.map(r=>r.l))];$('pos').innerHTML=u.slice(0,10).map(v=>`<option>${v}</option>`).join('');
+ const g=u.find(v=>/^(f|female|1)$/i.test(v));if(g)$('pos').value=g;
+ $('dinfo').textContent=D.length+' rows · labels: '+u.slice(0,10).join(', ');$('go').disabled=D.length<30};
+function metrics(P,Y,t){let tp=0,fp=0,tn=0,fn=0;P.forEach((p,i)=>{const q=p>t;if(q&&Y[i])tp++;else if(q)fp++;else if(Y[i])fn++;else tn++});
+ const n=P.length,pr=tp/(tp+fp||1),rc=tp/(tp+fn||1);return{acc:(tp+tn)/n,pr,rc,f1:2*pr*rc/(pr+rc||1),tp,fp,tn,fn}}
+function bestT(P,Y){let b=[.5,0];for(let t=.05;t<.96;t+=.01){const a=metrics(P,Y,t).acc;if(a>b[1])b=[t,a]}return b}
+function trainLR(X,y,l2){const n=X.length,d=X[0].length,mu=[],sd=[];for(let j=0;j<d;j++){const c=X.map(r=>r[j]),m=c.reduce((a,b)=>a+b)/n;mu.push(m);sd.push(Math.sqrt(c.reduce((a,v)=>a+(v-m)**2,0)/n)||1)}
+ const Z=X.map(r=>r.map((v,j)=>(v-mu[j])/sd[j])),w=Array(d).fill(0);let b=0;
+ for(let it=0;it<2500;it++){const g=Array(d).fill(0);let gb=0;for(let i=0;i<n;i++){let z=b;for(let j=0;j<d;j++)z+=w[j]*Z[i][j];const e=sig(z)-y[i];gb+=e;for(let j=0;j<d;j++)g[j]+=e*Z[i][j]}
+  b-=0.5*gb/n;for(let j=0;j<d;j++)w[j]-=0.5*(g[j]/n+l2*w[j])}return{w,b,mu,sd}}
+$('go').onclick=()=>{$('st').textContent='Training…';setTimeout(()=>{
+ const hu=$('dhu').value==='in'?2.54:1,wu=$('dwu').value==='lb'?0.45359237:1,pos=$('pos').value,x=$('xf').checked,tsp=+$('ts').value/100;
+ let seed=42;const rnd=()=>(seed=(seed*1664525+1013904223)%4294967296)/4294967296;
+ const R=D.map(r=>({h:r.h*hu,w:r.w*wu,y:r.l===pos?1:0})).sort(()=>rnd()-.5),k=Math.floor(R.length*tsp),te=R.slice(0,k),tr=R.slice(k);
+ const m=trainLR(tr.map(r=>feats(r.h,r.w,x)),tr.map(r=>r.y),+$('l2').value);T={...m,x,rng:[Math.floor(Math.min(...R.map(r=>r.h))),Math.ceil(Math.max(...R.map(r=>r.h))),Math.floor(Math.min(...R.map(r=>r.w))),Math.ceil(Math.max(...R.map(r=>r.w)))]};
+ const Y=te.map(r=>r.y),Po=te.map(r=>sig(zOf(r.h,r.w,'orig'))),Pn=te.map(r=>sig(zOf(r.h,r.w,'new'))),t=+$('th').value;
+ const bo=bestT(Po,Y),bn=bestT(Pn,Y),mo=metrics(Po,Y,t),mn=metrics(Pn,Y,t),mo5=metrics(Po,Y,bo[0]),mn5=metrics(Pn,Y,bn[0]);
+ const row=(n,a)=>`<tr><td>${n}</td><td>${(a.acc*100).toFixed(2)}%</td><td>${(a.pr*100).toFixed(1)}%</td><td>${(a.rc*100).toFixed(1)}%</td><td>${(a.f1*100).toFixed(1)}%</td><td>${a.tp}/${a.fp}/${a.fn}/${a.tn}</td></tr>`;
+ $('res').innerHTML=`<div class="note">Test set: ${te.length} rows (never used for training) · Train: ${tr.length} rows</div><table><tr><th>Model @ threshold</th><th>Accuracy</th><th>Precision</th><th>Recall</th><th>F1</th><th>TP/FP/FN/TN</th></tr>
+ ${row('Original @ '+t.toFixed(2),mo)}${row('Original @ best '+bo[0].toFixed(2),mo5)}${row('Retrained @ '+t.toFixed(2),mn)}${row('Retrained @ best '+bn[0].toFixed(2),mn5)}</table>
+ <div class="row"><button id="ab">Use retrained model + its best threshold in Predict tab</button></div>
+ <div class="note">Retrained weights (standardised): ${m.w.map(v=>v.toFixed(3)).join(', ')} · bias ${m.b.toFixed(3)}. “Best threshold” is picked on the test set, so treat it as slightly optimistic.</div>`;
+ $('mod').querySelector('[value=new]').disabled=false;$('dl').disabled=false;$('st').textContent='Done.';
+ $('ab').onclick=()=>{$('mod').value='new';$('th').value=bn[0].toFixed(2);$('t1').click()}},30)};
+$('dl').onclick=()=>dlf('retrained_model.json',JSON.stringify(T,null,1),'application/json');
+run();
+</script></body></html>
